@@ -1,0 +1,58 @@
+# ============================================================
+# Python
+# ============================================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+ENV/
+
+# ============================================================
+# IDE / editor files
+# ============================================================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ============================================================
+# Generated GPS data
+# ============================================================
+# Stationary payload
+/programs/payload/stationary/logs/
+/programs/payload/stationary/latest_gps.json
+
+# Airborne payload
+/programs/payload/air/logs/
+/programs/payload/air/latest_gps.json
+
+# GPS test output, if generated
+/programs/payload/gps_test/logs/
+/programs/payload/gps_test/latest_gps.json
+
+# Generic logs anywhere in the repository
+logs/
+latest_gps.json
+
+# Generated CSV GPS logs
+*.csv
+
+# ============================================================
+# Temporary / generated files
+# ============================================================
+*.tmp
+*.temp
+*.bak
+*.log
+
+# ============================================================
+# OS-generated files
+# ============================================================
+.DS_Store
+Thumbs.db
+desktop.ini
