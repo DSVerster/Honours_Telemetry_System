@@ -108,7 +108,7 @@ The overall system consists of an airborne GPS and telemetry subsystem and a gro
 │          logs/*.csv             gps_transmit.py             │
 │                                        │                    │
 │                                        ▼                    │
-│                                  NTX2 Transmitter            │
+│                                  NTX2 Transmitter           │
 │                                        │                    │
 └────────────────────────────────────────┼────────────────────┘
                                          │
@@ -123,15 +123,15 @@ The overall system consists of an airborne GPS and telemetry subsystem and a gro
                                          │
                                          ▼
                               ┌─────────────────────┐
-                              │      Arduino       │
-                              │   gps_receive.ino  │
+                              │      Arduino        │
+                              │   gps_receive.ino   │
                               └──────────┬──────────┘
                                          │
                                   Decoded telemetry
                                          │
                                          ▼
                               ┌─────────────────────┐
-                              │  ground_station.py │
+                              │  ground_station.py  │
                               └──────────┬──────────┘
                                          │
                                          ▼
