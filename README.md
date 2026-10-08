@@ -1,6 +1,46 @@
 # Honours_Telemetry_System
 
-A stratospheric balloon telemetry system developed for my BSc. Honours Computer Science & Information Technology project. It combines GPS tracking, UHF radio communication (Radiometrix NTX2 / NRX2), onboard data logging, and a ground station that receives, decodes, and logs flight telemetry at high altitude.
+A stratospheric balloon telemetry system developed for my Honours project. It combines GPS tracking, UHF radio communication (Radiometrix NTX2 / NRX2), onboard data logging, and a ground station that receives, decodes, and logs flight telemetry at high altitude.
+
+---
+
+## Technology Stack
+
+### Hardware
+
+| Subsystem | Technology |
+|---|---|
+| Payload computer | **Raspberry Pi Zero W (v1.1)** running Raspberry Pi OS / Debian |
+| GPS | **Uputronics u-blox GPS** expansion board (v3.2b, 2016), connected to the Pi's UART (`/dev/serial0`) |
+| Transmitter | Radiometrix **NTX2** - UHF narrow-band FM transmitter |
+| Receiver | Radiometrix **NRX2** - UHF narrow-band FM receiver (baseband output plus RSSI) |
+| Ground decoder | **Arduino Uno (Rev3)** |
+| Ground computer | PC / laptop running **Windows 10**, connected to the Arduino over USB |
+| Antennas | Whip-style (monopole) antennas on the transmitter and receiver |
+| Power (payload) | 5 V USB: either a USB power bank or a normal USB port |
+
+### Software
+
+| Layer | Technology |
+|---|---|
+| Payload programs | **Python 3** (3.7 or newer) |
+| GPS interface | **gpsd** daemon, read through the `gps` Python client (`python3-gps`) |
+| Radio output | **RPi.GPIO** - the Pi toggles GPIO17 directly to drive the NTX2 modulation input (software "bit-banging", timed with `time.perf_counter`) |
+| Receiver firmware | **Arduino C++** (Arduino core only, no external libraries), using an external interrupt on D2 for edge timing |
+| Ground logger | **Python 3** (3.7 or newer) with **pyserial** |
+| Analysis | **Python 3** standard library only (`csv`, `statistics`, `math`) |
+| Version control | **Git** / GitHub |
+
+### Communication and data
+
+| Item | Technology |
+|---|---|
+| Radio link | UHF, one-way (payload to ground), narrow-band FM |
+| Line coding | **Manchester** encoding (IEEE 802.3 convention), 4000 µs bit period (250 bit/s) by default |
+| Framing | Custom frame: 6-byte `0xAA` preamble, 2-byte sync word (`0x2DD4`), length byte, ASCII payload, **CRC-8** (polynomial `0x07`) |
+| Telemetry payload | Compact comma-separated ASCII text |
+| Arduino to PC | USB serial, 115200 baud, line-based `LOG,...` records |
+| Data storage | **CSV** (GPS and received-telemetry logs), **JSON** (`latest_gps.json`), plain-text logs (`gps_transmit.log`) |
 
 ---
 
