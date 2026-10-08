@@ -1,93 +1,77 @@
 # Honours_Telemetry_System
-A stratospheric balloon telemetry system developed for my Honours project, combining GPS tracking, UHF radio communication, onboard data logging, and a ground station to transmit, receive, decode, and monitor flight telemetry at high altitudes.
+
+A stratospheric balloon telemetry system developed for my BSc. Honours Computer Science & Information Technology project. It combines GPS tracking, UHF radio communication (Radiometrix NTX2 / NRX2), onboard data logging, and a ground station that receives, decodes, and logs flight telemetry at high altitude.
+
+---
 
 ## Repository Structure
 
 ```text
-Repo/
+Honours_Telemetry_System/
 ├── programs/
 │   ├── payload/
-│   │   ├── stationary/
-│   │   │   ├── gps_transmit.py
+│   │   ├── air/
 │   │   │   ├── gps_execute.py
+│   │   │   └── gps_transmit.py
+│   │   │
+│   │   ├── stationary/
+│   │   │   ├── gps_execute.py
+│   │   │   ├── gps_transmit.py
 │   │   │   └── analysis.py
 │   │   │
-│   │   └── air/
-│   │       ├── gps_transmit.py
-│   │       └── gps_execute.py
-│   │
-│   ├── gps_test/
-│   │   └── verify.py
+│   │   └── gps_test/
+│   │       └── verify.py
 │   │
 │   └── ground/
-│       ├── gps_receive.ino
-│       ├── ground_station.py
-│       └── [future Python logging program]
+│       └── receiver_logger/
+│           ├── receiver_logger.ino
+│           └── gps_receive_logger.py
 │
 ├── documents/
-│   └── [wiring diagrams, datasheets, supporting documentation, etc.]
+│   └── Honours_Research_Project (incomplete).pdf
 │
 ├── README.md
 ├── requirements.txt
 └── .gitignore
 ```
 
-### `programs/payload/stationary/`
-
-Contains the software used for stationary and controlled testing of the payload system.
-
-- `gps_execute.py` — obtains GPS data, validates GPS fixes, records GPS measurements, and maintains the latest valid GPS position.
-- `gps_transmit.py` — reads the latest GPS position and transmits a compact telemetry frame.
-- `analysis.py` — analyses GPS data collected during stationary experiments.
-
-The stationary implementation is intended primarily for controlled testing, system verification, data collection, and analysis.
+Runtime-generated `logs/` folders and `latest_gps.json` files will appear inside the program folders when the programs are run. They are **never committed** (see [Generated Data and Version Control](#generated-data-and-version-control)).
 
 ### `programs/payload/air/`
 
-Contains the software intended for operation while the balloon is airborne.
+Software intended for operation while the balloon is airborne.
 
-The airborne versions of `gps_execute.py` and `gps_transmit.py` may differ from the stationary versions in terms of:
+- `gps_execute.py` - reads GPS data from `gpsd`, validates fixes, logs them to CSV, and maintains `latest_gps.json`.
+- `gps_transmit.py` - reads `latest_gps.json` and transmits it through the NTX2 as a Manchester-encoded frame.
 
-- information logged;
-- logging intervals;
-- telemetry transmission intervals; and
-- other configuration required specifically for airborne operation.
+The airborne versions may differ from the stationary versions in logging intervals, transmission intervals, and other flight-specific configuration. The underlying GPS and telemetry functionality is the same.
 
-The underlying GPS and telemetry functionality remains the same.
+### `programs/payload/stationary/`
 
-### `programs/gps_test/`
+Software for stationary and controlled testing of the payload.
 
-Contains software used to verify the operation of the GPS module independently of the main payload programs.
+- `gps_execute.py` - as above.
+- `gps_transmit.py` - as above.
+- `analysis.py` - analyses the GPS CSV logs collected during stationary experiments.
 
-- `verify.py` — reads and displays readings received from the connected GPS module.
+### `programs/payload/gps_test/`
 
-This program is intended for GPS hardware and communication verification rather than normal payload operation.
+- `verify.py` - reads from `gpsd` and prints the current fix every 2 seconds, to verify the GPS hardware and communication path independently of the main payload programs.
 
-### `programs/ground/`
+### `programs/ground/receiver_logger/`
 
-Contains software associated with the ground station.
+Software for the ground station.
 
-- `gps_receive.ino` — Arduino program responsible for receiving and decoding the telemetry data.
-- `ground_station.py` — Python ground-station program.
-- A further Python logging program may be added later for recording received telemetry.
+- `receiver_logger.ino` - Arduino Uno sketch. Decodes the Manchester telemetry from the NRX2 receiver and prints each frame over USB serial, including a machine-readable `LOG,...` line.
+- `gps_receive_logger.py` - runs on the ground PC, reads the Arduino's serial output, and writes one row per unique transmission to `logs/gps_received.csv`.
 
 ### `documents/`
 
-Contains supporting project material such as:
-
-- wiring diagrams;
-- system diagrams;
-- hardware documentation;
-- datasheets;
-- experimental documentation;
-- test results; and
-- other relevant project documents.
+Supporting project material (the research report, wiring diagrams, datasheets, test results, etc.).
 
 ---
 
-# System Overview
-
-The overall system consists of an airborne GPS and telemetry subsystem and a ground station.
+## System Overview
 
 ```text
                          AIRBORNE PAYLOAD
@@ -97,7 +81,7 @@ The overall system consists of an airborne GPS and telemetry subsystem and a gro
 │                           │                                 │
 │                           │ UART                            │
 │                           ▼                                 │
-│                    Raspberry Pi                             │
+│                  Raspberry Pi (gpsd)                        │
 │                           │                                 │
 │              ┌────────────┴────────────┐                    │
 │              │                         │                    │
@@ -118,94 +102,137 @@ The overall system consists of an airborne GPS and telemetry subsystem and a gro
                               ┌─────────────────────┐
                               │   NRX2 Receiver     │
                               └──────────┬──────────┘
-                                         │
-                                    Baseband data
-                                         │
+                                         │ baseband (D2) + RSSI (A0)
                                          ▼
                               ┌─────────────────────┐
-                              │      Arduino        │
-                              │   gps_receive.ino   │
+                              │  Arduino Uno        │
+                              │  receiver_logger.ino│
                               └──────────┬──────────┘
-                                         │
-                                  Decoded telemetry
-                                         │
+                                         │ USB serial, 115200 baud
+                                         │ "LOG,OK,<ms>,<RSSI>,<payload>"
                                          ▼
                               ┌─────────────────────┐
-                              │  ground_station.py  │
+                              │ gps_receive_logger  │
+                              │        .py          │
                               └──────────┬──────────┘
                                          │
                                          ▼
-                                  Display / Logging
+                              logs/gps_received.csv
 ```
 
 ---
 
-# GPS Subsystem
+## Installation
+
+### Payload (Raspberry Pi)
+
+1. Install the system packages. These are **not** pip packages:
+
+   ```bash
+   sudo apt update
+   sudo apt install gpsd gpsd-clients python3-gps python3-pip python3-venv
+   ```
+
+2. Create a virtual environment and install the Python dependencies. The `--system-site-packages` flag is important: it lets the virtual environment see the apt-installed `gps` module.
+
+   ```bash
+   cd Honours_Telemetry_System
+   python3 -m venv --system-site-packages .venv
+   source .venv/bin/activate
+   python3 -m pip install -r requirements.txt
+   ```
+
+   Newer Raspberry Pi OS releases (Bookworm and later) block `pip install` into the system Python, which is why the virtual environment is used.
+
+   If `RPi.GPIO` fails to build, run `sudo apt install python3-dev` and retry, or install the apt package `python3-rpi.gpio` instead.
+
+### Ground station (PC / laptop)
+
+1. Install Python 3 and the dependencies:
+
+   ```bash
+   python3 -m pip install -r requirements.txt
+   ```
+
+   On the ground PC this installs only `pyserial`; `RPi.GPIO` is skipped automatically because it is restricted to Raspberry Pi architectures in `requirements.txt`.
+
+2. Install the Arduino IDE (or `arduino-cli`) to upload `receiver_logger.ino` to the Arduino Uno. No additional Arduino libraries are required.
+
+### What goes where
+
+| Dependency | Installed with | Used by |
+|---|---|---|
+| `gpsd`, `gpsd-clients`, `python3-gps` | `apt` | `gps_execute.py`, `verify.py` |
+| `RPi.GPIO` | `requirements.txt` | `gps_transmit.py` |
+| `pyserial` | `requirements.txt` | `gps_receive_logger.py` |
+| *(standard library only)* | - | `analysis.py` |
+
+---
+
+## GPS Subsystem
 
 The payload GPS software communicates with the GPS receiver through `gpsd`.
 
-The GPS execution program:
+`gps_execute.py`:
 
-1. connects to the GPS service;
-2. receives GPS reports;
-3. checks whether a usable GPS fix is available;
-4. records valid GPS measurements;
-5. updates `latest_gps.json`; and
-6. makes the latest position available to other payload software.
+1. connects to `gpsd`;
+2. receives TPV (time-position-velocity) reports;
+3. accepts a report as valid only if it has a 3D fix (`mode >= 3`) with latitude and longitude present;
+4. updates `latest_gps.json` on **every** valid fix;
+5. appends a row to the session CSV log every `LOG_INTERVAL` seconds (5 s in the current code).
 
-The current GPS implementation considers a 3D fix (`mode >= 3`) necessary and requires latitude and longitude to be available before a position is considered valid.
+Altitude, speed, and track are optional and are recorded as `None`/empty if the receiver has not provided them.
+
+Updating `latest_gps.json` on every fix, independently of the 5-second logging interval, means the transmitter always has access to the newest valid position.
+
+### GPS startup procedure
+
+`gpsd` must be prepared manually before running the GPS programs:
+
+```bash
+sudo pkill -f "cat /dev/serial0"
+sudo systemctl stop gpsd.socket gpsd.service
+sudo gpsd /dev/serial0 -F /var/run/gpsd.sock -n
+```
+
+These commands are **not** intended to run automatically at boot. Run them by hand before starting a GPS program.
+
+### GPS verification
+
+To check the GPS hardware on its own:
+
+```bash
+cd programs/payload/gps_test
+python3 verify.py
+```
+
+`verify.py` prints a line every 2 seconds, either `GPS FIX` (with mode, latitude, longitude, altitude, speed, track, and satellites) or `NO POSITION FIX`. It accepts a 2D fix or better, whereas `gps_execute.py` requires a 3D fix.
 
 ---
 
-# GPS Data Logging
+## GPS Data Logging
 
-Each execution of `gps_execute.py` creates a separate CSV log in a local `logs` directory.
-
-The recorded GPS information includes:
+Each run of `gps_execute.py` creates a new CSV in a `logs/` directory next to the script:
 
 ```text
-system_time
-satellite_time
-latitude
-longitude
-altitude_m
-speed_mps
-track_deg
-satellites_used
+logs/gps_log_YYYY-MM-DD_HH-MM-SS.csv        (timestamp is UTC)
 ```
 
-A typical log filename follows the form:
+The first line of each file is a metadata line (`Logging session started: <ISO timestamp>`), followed by a header and one row per logged fix:
 
 ```text
-gps_log_YYYY-MM-DD_HH-MM-SS.csv
+system_time, satellite_time, latitude, longitude,
+altitude_m, speed_mps, track_deg, satellites_used
 ```
 
-For example:
+### Latest GPS position
 
-```text
-gps_log_2026-09-19_02-23-06.csv
-```
-
-The logging interval is configurable through the individual payload implementation. The stationary and airborne versions may therefore use different intervals.
-
----
-
-# Latest GPS Position
-
-In addition to the historical CSV log, the GPS program maintains:
-
-```text
-latest_gps.json
-```
-
-This file contains the most recent valid GPS position.
-
-An example is:
+`gps_execute.py` also maintains `latest_gps.json` (next to the script), which holds the most recent valid fix:
 
 ```json
 {
     "system_time": "...",
-    "satellite_time": "...",
+    "satellite_time": "2026-09-19T02:23:06.000Z",
     "latitude": -26.6886298,
     "longitude": 27.0952813,
     "altitude_m": 1344.117,
@@ -215,99 +242,15 @@ An example is:
 }
 ```
 
-The JSON file is intended to provide a simple interface between the GPS acquisition program and other payload programs.
-
-In particular, `gps_transmit.py` reads this file to obtain the latest position that should be transmitted.
-
-The GPS program writes the JSON file through a temporary file before replacing the previous version. This prevents another program from attempting to read a partially written JSON file.
+This is the interface between GPS acquisition and the transmitter. The file is written to a temporary file and then atomically swapped in with `os.replace`, so `gps_transmit.py` can never read a half-written JSON file.
 
 ---
 
-# GPS Startup Procedure
+## Telemetry
 
-The GPS module requires the Raspberry Pi GPS service to be prepared before running the GPS programs.
+### Payload format
 
-The following commands are currently required:
-
-```bash
-sudo pkill -f "cat /dev/serial0"
-sudo systemctl stop gpsd.socket gpsd.service
-sudo gpsd /dev/serial0 -F /var/run/gpsd.sock -n
-```
-
-These commands are **not intended to run automatically at system startup**.
-
-They should instead be run manually before starting one of the GPS programs.
-
-A shell script may be provided in the future to perform these commands automatically when requested by the user, for example:
-
-```bash
-./start_gps.sh
-```
-
-The script would only prepare GPSD when manually executed. It would not install itself as a service and would not execute automatically when the Raspberry Pi boots.
-
-After the GPS service has been prepared, the relevant GPS program can be run normally.
-
-For example:
-
-```bash
-cd programs/payload/stationary
-python3 gps_execute.py
-```
-
-or:
-
-```bash
-cd programs/payload/air
-python3 gps_execute.py
-```
-
----
-
-# GPS Verification
-
-Before running the main payload software, the GPS module can be tested independently using:
-
-```text
-programs/gps_test/verify.py
-```
-
-The purpose of this program is simply to read available information from the connected GPS module and provide a straightforward way to verify that the GPS hardware and communication path are functioning.
-
-A typical testing sequence is therefore:
-
-```text
-GPS hardware
-     │
-     ▼
-verify.py
-     │
-     ▼
-Confirm GPS readings
-     │
-     ▼
-Prepare GPSD
-     │
-     ▼
-gps_execute.py
-```
-
----
-
-# Telemetry System
-
-The payload uses a Radiometrix NTX2 transmitter to transmit GPS information from the balloon to the ground station.
-
-The telemetry transmitter reads:
-
-```text
-latest_gps.json
-```
-
-and converts the GPS information into a compact ASCII payload.
-
-The current payload format is:
+`gps_transmit.py` converts `latest_gps.json` into a compact ASCII payload:
 
 ```text
 <transmission_counter>,<latitude>,<longitude>,<altitude>,<HHMMSS>
@@ -319,433 +262,295 @@ For example:
 1,-26.68863,27.09528,1344,022306
 ```
 
-The payload contains:
+- `transmission_counter` - starts at 0 each time the transmitter is started and increases by one per transmitted burst. It acts as a **group ID**: all repeated copies of one reading share the same counter value.
+- `latitude`, `longitude` - 5 decimal places (reduced to 4 if the payload would exceed 40 bytes).
+- `altitude` - whole metres.
+- `HHMMSS` - UTC time of the GPS fix, taken from the satellite time (falls back to the Pi's UTC clock if the satellite time is unavailable).
 
-- a transmission counter;
-- latitude;
-- longitude;
-- altitude; and
-- the GPS fix time in UTC.
-
-The compact format reduces the amount of data that must be transmitted while retaining the primary information required for balloon tracking and recovery.
-
----
-
-# Telemetry Frame
-
-The current transmitter constructs a frame consisting of:
+### Frame structure
 
 ```text
-Preamble
-    +
-Synchronisation sequence
-    +
-Payload length
-    +
-Payload
-    +
-CRC
+Preamble (6 x 0xAA) + Sync (0x2D 0xD4) + Length (1 byte) + Payload (1-40 bytes) + CRC-8
 ```
 
-The transmitter currently uses:
+- CRC-8 uses polynomial `0x07` and covers the length byte and payload.
+- The whole frame is Manchester-encoded (IEEE 802.3 convention): bit `1` = LOW then HIGH, bit `0` = HIGH then LOW.
+- The default bit period is 4000 µs (250 bit/s). A typical 32-byte payload gives a 42-byte frame, roughly 1.3 s per copy.
+- The Arduino decoder also accepts an inverted signal.
 
-- a six-byte `0xAA` preamble;
-- a two-byte synchronisation sequence;
-- a payload-length byte;
-- the ASCII telemetry payload;
-- an 8-bit CRC; and
-- Manchester encoding.
+`MAX_PAYLOAD_BYTES` in `gps_transmit.py` must match `MAX_PAYLOAD` in `receiver_logger.ino`, and `--bit-us` must match `BIT_US` in the sketch.
 
-Manchester encoding is implemented as:
+### Repeated transmission
 
-```text
-Bit 1 → LOW → HIGH
-Bit 0 → HIGH → LOW
-```
+Each GPS reading is sent as a burst of identical copies, so that the receiver has several chances to decode it. Defaults:
 
-The receiver-side decoder is designed to interpret this same encoding.
+| Option | Default | Meaning |
+|---|---|---|
+| `--gpio` | `17` | BCM GPIO pin driving the NTX2 TXD input |
+| `--bit-us` | `4000` | Manchester bit period in microseconds |
+| `--repeats` | `6` | Copies of the frame per reading |
+| `--gap-ms` | `0` | Idle gap between copies in a burst |
+| `--interval` | `60` | Seconds between readings/bursts |
+| `--json-path` | `latest_gps.json` | GPS JSON file to read (relative to the current directory) |
+| `--log-dir` | `logs` | Directory for `gps_transmit.log` |
+| `--seconds` | `0` | Stop after N seconds (`0` = run until Ctrl+C) |
 
----
-
-# Repeated Telemetry Transmission
-
-A single GPS reading may be transmitted multiple times as a burst.
-
-The current transmitter implementation supports configurable:
-
-- GPIO pin;
-- Manchester bit timing;
-- number of repeated copies;
-- gap between copies;
-- transmission interval;
-- GPS JSON path; and
-- total execution duration.
-
-For example:
+Examples:
 
 ```bash
 python3 gps_transmit.py
-```
-
-or:
-
-```bash
 python3 gps_transmit.py --interval 120 --repeats 6
-```
-
-The transmitter can also be directed to a specific GPS JSON file:
-
-```bash
 python3 gps_transmit.py --json-path /home/strato/latest_gps.json
-```
-
-Run:
-
-```bash
 python3 gps_transmit.py --help
 ```
 
-to view the available options.
+### Transmit log
 
-The `air` and `stationary` versions may use different transmission intervals according to their experimental requirements.
+Every transmission, warning, and error is also written to `logs/gps_transmit.log` (in the current working directory, or `--log-dir`). Raw GPS reads between transmissions are not logged. If `latest_gps.json` is missing or contains bad data, the cycle is skipped with a warning.
+
+### Running with GPIO access
+
+`gps_transmit.py` tries to raise its scheduling priority (`SCHED_FIFO`) for accurate bit timing. This needs root; without it the script silently continues at normal priority. If you use the virtual environment, `sudo python3` will **not** see its packages, so call the venv interpreter explicitly:
+
+```bash
+sudo .venv/bin/python3 gps_transmit.py
+```
 
 ---
 
-# Ground Station
+## Ground Station
 
-The ground station receives the transmitted UHF telemetry and converts it back into usable GPS information.
-
-The intended signal path is:
+### Hardware connections (NRX2 to Arduino Uno)
 
 ```text
-Radiometrix NTX2
-       │
-       │ UHF RF
-       ▼
-Radiometrix NRX2
-       │
-       │ Baseband
-       ▼
-Arduino
-       │
-       │ gps_receive.ino
-       ▼
-Decoded telemetry
-       │
-       ▼
-ground_station.py
-       │
-       ▼
-Display / Logging
+NRX2 pin 7  (RXD)   -> Arduino D2   (direct, no resistor)
+NRX2 pin 3  (RSSI)  -> Arduino A0
+NRX2 pin 5  (Vcc)   -> Arduino 5V
+NRX2 pins 4 and 2   -> GND
+NRX2 pin 1          -> antenna
 ```
 
-The Arduino receiver program will be named:
+### Arduino sketch
+
+Upload `programs/ground/receiver_logger/receiver_logger.ino` to the Uno. It:
+
+- timestamps every signal edge with an interrupt on D2 and decodes the Manchester stream (6 consecutive long intervals in the preamble establish bit timing);
+- checks the CRC;
+- prints a human-readable line for the Serial Monitor (115200 baud) for every frame, good or bad;
+- prints a machine-readable line for every frame:
+
+  ```text
+  LOG,<OK|BAD>,<millis>,<RSSI_mV>,<payload text>
+  ```
+
+  for example `LOG,OK,45231,1862,5,-26.68863,27.09528,1344,022306`;
+- prints a `[status]` line every 2 seconds with RSSI, edge count, preamble locks, and OK/bad frame counts.
+
+### Receive logger
+
+`gps_receive_logger.py` reads the Arduino's serial output and logs **one row per unique transmission**, not one row per received copy.
+
+1. For each `LOG,OK,...` line with a valid GPS payload, it counts the copy against that transmission's group ID.
+2. Once `--finalize-seconds` (default 10) pass without a new copy of that group, it writes a single row with the fix data and the number of copies received.
+3. Any groups still pending when you press Ctrl+C are written before exit.
+
+`BAD` (failed CRC) frames and payloads that are not in the GPS format are ignored.
+
+Usage:
+
+```bash
+cd programs/ground/receiver_logger
+python3 gps_receive_logger.py --port /dev/ttyACM0
+python3 gps_receive_logger.py --port COM3 --baud 115200
+python3 gps_receive_logger.py --port COM3 --log-dir logs --finalize-seconds 10
+```
+
+Finding the serial port:
+
+- Linux / macOS: `ls /dev/ttyACM* /dev/ttyUSB* /dev/tty.*`
+- Windows: Device Manager -> Ports (COM & LPT)
+
+Output is appended to `logs/gps_received.csv` with the columns:
 
 ```text
-gps_receive.ino
+logged_at_utc, group_id, latitude, longitude, altitude_m,
+fix_time_hhmmss, rssi_mv, copies_received
 ```
 
-The associated Python ground-station program will be named:
+Notes when interpreting this file:
 
-```text
-ground_station.py
-```
-
-A separate Python program for logging received telemetry may be added later.
-
-The ground-station software is deliberately separated from the airborne payload software so that the receiver and decoding system can be tested independently.
+- `copies_received` is the number of copies decoded out of the `--repeats` sent, so it is a simple per-transmission reliability measure.
+- `rssi_mv` is the RSSI measured when the **first** copy of that group was decoded.
+- `group_id` restarts at 0 whenever the transmitter is restarted, so it is only unique within one transmitter run. Use `logged_at_utc` to tell runs apart.
+- The file is opened in append mode, so data from multiple sessions accumulates in the same CSV.
 
 ---
 
-# Airborne and Stationary Configurations
+## Running the System
 
-The repository contains separate `air` and `stationary` implementations because the two operating environments have different requirements.
+### Payload
 
-### Stationary
+1. **Verify the GPS** (optional but recommended):
 
-The stationary configuration is intended for:
+   ```bash
+   cd programs/payload/gps_test
+   python3 verify.py
+   ```
 
-- controlled testing;
-- GPS testing;
-- telemetry testing;
-- data collection;
-- transmitter/receiver experiments; and
-- analysis of experimental GPS data.
+2. **Prepare gpsd** with the three commands in [GPS startup procedure](#gps-startup-procedure).
 
-### Airborne
+3. **Start the GPS logger** (use `stationary` or `air`):
 
-The airborne configuration is intended for:
+   ```bash
+   cd programs/payload/stationary
+   python3 gps_execute.py
+   ```
 
-- actual balloon operation;
-- tracking;
-- recovery;
-- reduced unnecessary data transmission;
-- appropriate telemetry intervals; and
-- operation within the power constraints of the payload.
+4. **Start telemetry**, in a second terminal, once valid GPS data is available:
 
-The two configurations should therefore **not automatically be assumed to be identical**.
+   ```bash
+   cd programs/payload/stationary
+   python3 gps_transmit.py
+   ```
 
-Changes made to one configuration should be evaluated to determine whether the corresponding change is also required in the other.
+### Ground station
 
----
+1. Upload `receiver_logger.ino` to the Arduino.
+2. Run `gps_receive_logger.py` with the Arduino's serial port (see above).
 
-# Installation
+### Stationary vs airborne
 
-## Raspberry Pi System Requirements
+The `air` and `stationary` folders are kept separate because their operating requirements differ.
 
-The GPS subsystem requires the relevant GPSD software and Python GPS bindings.
+- **Stationary**: controlled testing, GPS testing, telemetry and transmitter/receiver experiments, and data collection for analysis.
+- **Airborne**: actual balloon operation, tracking and recovery, appropriate telemetry intervals, and operation within the payload's power constraints.
 
-On Raspberry Pi OS/Debian, install:
-
-```bash
-sudo apt update
-sudo apt install gpsd gpsd-clients python3-gps python3-pip
-```
-
-The repository also provides a Python requirements file:
-
-```bash
-python3 -m pip install -r requirements.txt
-```
-
-### Important
-
-`requirements.txt` contains Python package dependencies.
-
-The following are **system packages** and therefore should be installed using `apt`:
-
-```text
-gpsd
-gpsd-clients
-python3-gps
-python3-pip
-```
-
-They should not simply be listed as ordinary entries in a pip requirements file.
-
-A future `setup.sh` script can automate both the system-package installation and Python dependency installation if desired.
+Do not assume the two are identical. When a change is made to one, check whether the same change is needed in the other.
 
 ---
 
-# Running the GPS System
+## Analysing GPS Logs
 
-## 1. Verify the GPS
-
-From the repository:
-
-```bash
-cd programs/gps_test
-python3 verify.py
-```
-
-Confirm that readings are being received from the GPS module.
-
-## 2. Prepare GPSD
-
-Run:
-
-```bash
-sudo pkill -f "cat /dev/serial0"
-sudo systemctl stop gpsd.socket gpsd.service
-sudo gpsd /dev/serial0 -F /var/run/gpsd.sock -n
-```
-
-## 3. Start the GPS logger
-
-For stationary testing:
+`programs/payload/stationary/analysis.py` analyses the payload GPS CSVs from stationary experiments:
 
 ```bash
 cd programs/payload/stationary
-python3 gps_execute.py
+python3 analysis.py
 ```
 
-For airborne operation:
+It reads every `.csv` in the `logs/` directory next to the script and reports, per file and overall, the positional deviation from the file's own mean position, altitude, speed, satellite counts, consecutive position changes, and "jumps" (a change above 5 m between consecutive fixes). The report is printed and saved to `log_analysis.txt` (git-ignored).
+
+Because the reference position is each file's own mean, the results describe GPS **repeatability**, not absolute accuracy against a surveyed point.
+
+> **Note:** `analysis.py` expects the payload log format produced by `gps_execute.py`. Files that do not match (for example `gps_received.csv` from the ground station) are counted as "empty", and the script will offer to delete them. Keep ground-station logs out of the payload `logs/` folder, and answer `N` to the delete prompt if unsure.
+
+---
+
+## Generated Data and Version Control
+
+**No logs or generated data are ever committed to Git.** The `.gitignore` excludes:
+
+| Pattern | What it covers |
+|---|---|
+| `logs/`, `log/` | every logs directory in the repo (payload GPS CSVs, `gps_transmit.log`, `gps_received.csv`) |
+| `*.csv`, `*.csv.*` | any CSV |
+| `*.log`, `*.log.*` | any log file, including rotated ones |
+| `latest_gps.json`, `latest_gps.json.*`, `*.json.tmp` | the latest-position file and its temporary file |
+| `log_analysis.txt` | the report written by `analysis.py` |
+
+### Checking that nothing is tracked
+
+`.gitignore` only affects files Git is **not already tracking**. To confirm no data files are in the repository:
 
 ```bash
-cd programs/payload/air
-python3 gps_execute.py
+git ls-files | grep -Ei '\.(csv|log)$|(^|/)logs?/|latest_gps|log_analysis'
 ```
 
-The program will create the relevant log directory, create a session log, monitor GPS data, and update `latest_gps.json`.
-
-## 4. Start telemetry
-
-After valid GPS data is available:
+This should print nothing. To see which rule is ignoring a particular file:
 
 ```bash
-cd programs/payload/stationary
-python3 gps_transmit.py
+git check-ignore -v programs/ground/receiver_logger/logs/gps_received.csv
 ```
 
-or:
+### If a data file was already committed
+
+Stop tracking it (this keeps the file on disk):
 
 ```bash
-cd programs/payload/air
-python3 gps_transmit.py
+git rm -r --cached programs/ground/receiver_logger/logs
+git rm -r --cached programs/payload/stationary/logs
+git rm --cached programs/payload/stationary/latest_gps.json
+git commit -m "Stop tracking generated GPS data"
 ```
 
-The transmitter reads the latest valid GPS position and sends the configured telemetry frame.
+Only run the lines for paths that actually appear in `git ls-files`. Note that this removes the files from future commits only. If the data was already **pushed**, it remains in the repository history; removing it completely requires rewriting history (for example with `git filter-repo`) and force-pushing, and any existing clones or forks would still contain it. If the data is sensitive (such as launch-site or home coordinates), treat it as exposed.
+
+### Keeping experimental data
+
+Because data is not in the repository, back up important experimental logs separately (an external drive or institutional storage), and record which commit produced them (see [Reproducibility](#reproducibility)).
 
 ---
 
-# Requirements
-
-The Python requirements are intentionally kept in:
+## Development and Testing Workflow
 
 ```text
-requirements.txt
+1. Verify GPS hardware (programs/payload/gps_test/verify.py)
+        │
+        ▼
+2. Prepare gpsd
+        │
+        ▼
+3. Run gps_execute.py ──► latest_gps.json
+        │                 logs/gps_log_*.csv
+        ▼
+4. Confirm valid GPS data
+        │
+        ▼
+5. Run gps_transmit.py ──► logs/gps_transmit.log
+        │
+        ▼
+6. NRX2 + receiver_logger.ino decode the UHF transmission
+        │
+        ▼
+7. gps_receive_logger.py ──► logs/gps_received.csv
+        │
+        ▼
+8. Compare transmitted and received logs; run analysis.py on stationary GPS logs
 ```
 
-At present, the payload transmitter requires Raspberry Pi GPIO support.
-
-The GPS Python interface is supplied by the Raspberry Pi/Debian `python3-gps` package because the GPS programs communicate with `gpsd`.
-
-The complete dependency setup is therefore:
-
-```text
-Raspberry Pi OS
-      │
-      ├── gpsd
-      ├── gpsd-clients
-      ├── python3-gps
-      └── python3-pip
-             │
-             ▼
-      requirements.txt
-             │
-             └── Python packages
-```
+Each stage can be tested separately, which makes it easier to isolate problems in GPS acquisition, transmission, reception, or decoding.
 
 ---
 
-# Experimental Data
+## Reproducibility
 
-Generated GPS data is intentionally excluded from version control.
+For each significant experiment, record:
 
-The payload programs generate:
-
-```text
-logs/
-```
-
-and:
-
-```text
-latest_gps.json
-```
-
-These files are runtime/experimental data rather than source code.
-
-The `.gitignore` file therefore excludes these generated files and directories.
-
-Historical experimental data can be retained separately and analysed using:
-
-```text
-programs/payload/stationary/analysis.py
-```
-
----
-
-# Development and Testing Workflow
-
-The recommended development sequence is:
-
-```text
-1. Verify GPS hardware
-        │
-        ▼
-2. Run programs/gps_test/verify.py
-        │
-        ▼
-3. Prepare GPSD
-        │
-        ▼
-4. Run gps_execute.py
-        │
-        ├──────────────► latest_gps.json
-        │
-        └──────────────► logs/*.csv
-        │
-        ▼
-5. Verify GPS data
-        │
-        ▼
-6. Run gps_transmit.py
-        │
-        ▼
-7. Receive UHF transmission
-        │
-        ▼
-8. Decode using gps_receive.ino
-        │
-        ▼
-9. Process using ground_station.py
-        │
-        ▼
-10. Log and analyse received telemetry
-```
-
-This workflow allows the GPS acquisition, payload processing, radio transmission, radio reception, decoding, and ground-station software to be tested as separate stages.
-
----
-
-# Reproducibility
-
-For each significant experiment, it is recommended to record:
-
-- repository Git commit;
-- payload configuration;
-- GPS configuration;
-- transmitter configuration;
-- receiver configuration;
-- antenna configuration;
+- the repository Git commit (`git rev-parse HEAD`);
+- payload, GPS, transmitter, receiver, and antenna configuration;
 - GPS logging interval;
-- telemetry transmission interval;
-- number of repeated transmissions;
-- Manchester timing parameters;
-- experiment start time;
-- experiment end time; and
+- telemetry interval, number of repeated copies, and Manchester bit period;
+- experiment start and end time; and
 - relevant environmental conditions.
 
-Generated experimental data should be associated with the corresponding repository commit so that results can be reproduced against the correct version of the software.
+Associate generated data with the commit that produced it so results can be reproduced against the correct version of the software.
 
 ---
 
-# Project Status
+## Project Status
 
-This repository is an evolving research and engineering project.
+This is an evolving research and engineering project. Current components:
 
-The software and documentation may be updated as the GPS, telemetry, receiver, and ground-station subsystems are developed and tested.
-
-Planned and developing components include:
-
-- airborne payload software;
-- stationary testing software;
-- GPS verification tools;
-- UHF telemetry transmission;
-- UHF telemetry reception;
-- Arduino telemetry decoding;
-- ground-station software;
-- received-data logging;
-- experimental analysis; and
-- complete hardware and wiring documentation.
+- airborne and stationary payload software;
+- GPS verification tool;
+- UHF telemetry transmission (NTX2, Manchester framing, repeated bursts);
+- UHF telemetry reception and decoding (NRX2 + Arduino);
+- received-telemetry logging;
+- GPS log analysis; and
+- hardware and wiring documentation (in progress).
 
 ---
 
-# Documentation
+## Licence
 
-Additional project documentation is stored in:
-
-```text
-documents/
-```
-
-This directory is intended to contain the complete wiring diagrams, system diagrams, hardware documentation, datasheets, experimental documentation, and other supporting material.
-
----
-
-# Licence
-
-No licence has been specified for this repository yet.
-
-A suitable open-source or research-specific licence can be added when the project is ready for public distribution.
+No licence has been specified for this repository yet. A suitable open-source or research-specific licence can be added when the project is ready for public distribution.

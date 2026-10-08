@@ -2,13 +2,12 @@
 """
 NTX2 GPS beacon transmitter (Raspberry Pi, RPi.GPIO, GPIO17).
 
-Reads latest_gps.json from the current directory every --interval seconds
-and transmits a compact Manchester-encoded frame with the current fix,
-using the burst scheme already validated on the bench:
-
-    6 copies per reading, back-to-back with no gap, repeated every
-    --interval seconds (default 120s) -> ~90% per-reading success rate
-    in testing with a 1kOhm R3 and --bit-us 4000.
+Same as your gps_transmit.py (with the transmission_counter group-id
+field you added), plus file logging: every line this script would have
+printed to the console (what it transmitted, or a warning/error) is
+also written to logs/gps_transmit.log in the current directory. It does
+NOT log raw GPS JSON reads in between transmissions - only transmit
+events and problems, exactly as you asked.
 
 Expected JSON shape (extra fields are ignored):
     {
@@ -22,29 +21,23 @@ Expected JSON shape (extra fields are ignored):
       "satellites_used": 9
     }
 
-Payload format sent over the air (comma-separated, no labels, to save
-bytes against the 40-byte frame limit):
+Payload format sent over the air:
+    <transmission_counter>,<lat 5dp>,<lon 5dp>,<alt m, whole>,<HHMMSS of fix time>
 
-    <transmission_counter><lat 5dp>,<lon 5dp>,<alt m, whole>,<HHMMSS of fix time>
+Example: "1,-26.68863,27.09528,1344,022306"
 
-Example: "1,-26.68863,27.09528,1344,022306"  (about 32 bytes)
-
-The receiver (rx_manchester.ino / the diagnostic build) needs NO changes:
-it already prints whatever ASCII text is in the payload field.
+The receiver sketch needs the LOG, line added (see rx_manchester_logging.ino)
+for the companion gps_receive_logger.py to parse frames automatically.
 
 Usage:
-    python3 gps_transmit.py
-    python3 gps_transmit.py --json-path /home/strato/latest_gps.json
-    python3 gps_transmit.py --interval 120 --repeats 6
+    python3 gps_transmit_v2.py
+    python3 gps_transmit_v2.py --json-path /home/strato/latest_gps.json
+    python3 gps_transmit_v2.py --interval 120 --repeats 6
 
 Run with sudo for GPIO access / better timing.
 """
 
-import argparse
-import gc
-import json
-import os
-import time
+import argparse, gc, json, logging, os, time
 from datetime import datetime, timezone
 
 import RPi.GPIO as GPIO
@@ -102,7 +95,7 @@ def to_half_bits(frame):
     return halves
 
 def send_burst(pin, payload, repeats, gap_seconds, bit_us):
-    # Send `repeats` copies of the same frame, each separated by gap_seconds of idle. Returns (total_on_air_seconds, per_copy_seconds).
+    # Send `repeats` copies of the same frame, each separated by gap_seconds of idle.
     half_seconds = bit_us / 2 / 1_000_000
     one_frame_halves = to_half_bits(build_frame(payload))
     per_copy_seconds = len(one_frame_halves) * half_seconds
@@ -118,9 +111,8 @@ def send_burst(pin, payload, repeats, gap_seconds, bit_us):
 # ---------- GPS JSON -> compact payload ----------
 
 def fix_time_hhmmss(satellite_time_str):
-    # Extract HHMMSS from an ISO-ish timestamp like '2026-09-19T02:23:06.000Z'. Falls back to current UTC time if parsing fails.
+    # Extract HHMMSS from an ISO-ish timestamp. Falls back to current UTC time if parsing fails.
     try:
-        # Handle both '...Z' and '...+00:00' style suffixes
         s = satellite_time_str.replace("Z", "+00:00")
         dt = datetime.fromisoformat(s)
     except (ValueError, AttributeError, TypeError):
@@ -128,7 +120,6 @@ def fix_time_hhmmss(satellite_time_str):
     return dt.strftime("%H%M%S")
 
 def build_gps_payload(fix, transmission_counter):
-    # Build the compact comma-separated payload string from a parsed latest_gps.json dict. Raises KeyError/TypeError if required fields are missing or malformed - caller should catch and skip that cycle.
     lat = float(fix["latitude"])
     lon = float(fix["longitude"])
     alt = float(fix["altitude_m"])
@@ -138,7 +129,6 @@ def build_gps_payload(fix, transmission_counter):
     payload = text.encode("ascii")
 
     if len(payload) > MAX_PAYLOAD_BYTES:
-        # Fall back to fewer decimal places if somehow too long (e.g. huge altitude)
         text = f"{transmission_counter},{lat:.4f},{lon:.4f},{alt:.0f},{hhmmss}"
         payload = text.encode("ascii")
 
@@ -148,6 +138,28 @@ def read_latest_fix(json_path):
     with open(json_path, "r") as f:
         return json.load(f)
 
+# ---------- logging setup ----------
+
+def setup_logger(log_dir):
+    os.makedirs(log_dir, exist_ok=True)
+    log_path = os.path.join(log_dir, "gps_transmit.log")
+
+    logger = logging.getLogger("gps_transmit")
+    logger.setLevel(logging.INFO)
+    logger.propagate = False
+
+    fmt = logging.Formatter("%(asctime)s  %(levelname)-7s %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
+
+    file_handler = logging.FileHandler(log_path)
+    file_handler.setFormatter(fmt)
+    logger.addHandler(file_handler)
+
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(fmt)
+    logger.addHandler(console_handler)
+
+    return logger, log_path
+
 # ---------- main ----------
 
 def parse_args():
@@ -156,20 +168,22 @@ def parse_args():
     p.add_argument("--bit-us", type=int, default=4000,
                    help="Manchester bit period in microseconds (default 4000, matches tested setup)")
     p.add_argument("--repeats", type=int, default=6,
-                   help="copies of the frame per reading, back-to-back (default 6, matches the "
-                        "~90%% success-rate test)")
+                   help="copies of the frame per reading, back-to-back (default 6)")
     p.add_argument("--gap-ms", type=float, default=0.0,
                    help="idle gap in milliseconds between copies within one burst (default 0)")
-    p.add_argument("--interval", type=float, default=120.0,
-                   help="seconds between readings/bursts (default 120)")
+    p.add_argument("--interval", type=float, default=60.0,
+                   help="seconds between readings/bursts (default 60)")
     p.add_argument("--json-path", default="latest_gps.json",
                    help="path to the GPS JSON file (default: latest_gps.json in the current directory)")
+    p.add_argument("--log-dir", default="logs",
+                   help="directory for gps_transmit.log (default: ./logs)")
     p.add_argument("--seconds", type=float, default=0,
                    help="stop after N seconds total (0 = run until Ctrl+C)")
     return p.parse_args()
 
 def main():
     args = parse_args()
+    logger, log_path = setup_logger(args.log_dir)
 
     try:
         os.sched_setscheduler(0, os.SCHED_FIFO, os.sched_param(50))
@@ -180,11 +194,13 @@ def main():
     GPIO.setup(args.gpio, GPIO.OUT, initial=GPIO.LOW)
 
     end_time = None if (args.seconds <= 0) else time.monotonic() + args.seconds
-    print(f"NTX2 GPS beacon on GPIO{args.gpio}. Ctrl+C to stop.")
-    print(f"Reading: {args.json_path}")
-    print(f"Sending {args.repeats} copies per reading, {args.gap_ms:g} ms gap between copies, "
-          f"every {args.interval:g}s.\n")
-    transmission_counter = 0 #Counter used to define identifier for transmissions
+    logger.info(f"NTX2 GPS beacon on GPIO{args.gpio}. Ctrl+C to stop.")
+    logger.info(f"Reading: {args.json_path}")
+    logger.info(f"Logging transmissions to: {log_path}")
+    logger.info(f"Sending {args.repeats} copies per reading, {args.gap_ms:g} ms gap between copies, "
+                f"every {args.interval:g}s.")
+
+    transmission_counter = 0  # group identifier for this run's transmissions
     try:
         while (end_time is None or time.monotonic() < end_time):
             cycle_start = time.monotonic()
@@ -195,13 +211,14 @@ def main():
                 total_s, per_copy_s = send_burst(
                     args.gpio, payload, args.repeats, args.gap_ms / 1000.0, args.bit_us
                 )
-                print(f"sent: {text}  ({len(payload)} bytes)  x{args.repeats} copies  "
-                      f"({total_s:.2f} s total, {per_copy_s:.2f} s/copy)")
-                transmission_counter += 1 
+                logger.info(f"sent: {text}  ({len(payload)} bytes)  x{args.repeats} copies  "
+                            f"({total_s:.2f} s total, {per_copy_s:.2f} s/copy)")
+                transmission_counter += 1
+
             except FileNotFoundError:
-                print(f"[warn] {args.json_path} not found - skipping this cycle")
+                logger.warning(f"{args.json_path} not found - skipping this cycle")
             except (json.JSONDecodeError, KeyError, TypeError, ValueError) as e:
-                print(f"[warn] bad/incomplete GPS data ({e}) - skipping this cycle")
+                logger.warning(f"bad/incomplete GPS data ({e}) - skipping this cycle")
 
             elapsed = time.monotonic() - cycle_start
             sleep_for = max(0.0, args.interval - elapsed)
@@ -211,7 +228,7 @@ def main():
     finally:
         GPIO.output(args.gpio, GPIO.LOW)
         GPIO.cleanup()
-        print("\nStopped.")
+        logger.info("Stopped.")
 
 if (__name__ == "__main__"):
     main()

@@ -1,15 +1,32 @@
 /*
-  NRX2 Manchester receiver (Arduino Uno)
+  NRX2 Manchester receiver (Arduino Uno) - with machine-parseable logging
+
+  Same decoder as rx_manchester.ino. The only addition: every completed
+  frame (good or bad CRC) also prints a single-line, comma-separated
+  "LOG," record meant for a PC-side script to parse automatically:
+
+      LOG,<OK|BAD>,<millis>,<RSSI_mV>,<payload text>
+
+  The payload text itself is whatever ASCII was sent - for the GPS
+  beacon that's "<group_id>,<lat>,<lon>,<alt>,<hhmmss>", so a LOG line
+  looks like:
+
+      LOG,OK,45231,1862,5,-26.68863,27.09528,1344,022306
+
+  A parser should split on ',' with maxsplit=4: the first four fields
+  are fixed (LOG, status, millis, RSSI), and everything after the 4th
+  comma is the raw payload text (which may itself contain commas).
+
+  The original human-readable line is kept too, for anyone watching the
+  Serial Monitor live.
 
   Wiring (NRX2 powered from the Uno's 5V):
     NRX2 pin 7  RXD   -> D2   (direct, no resistor)
     NRX2 pin 3  RSSI  -> A0
     NRX2 pin 5  Vcc   -> 5V,  pins 4 and 2 -> GND,  pin 1 -> antenna
 
-  Pair with ntx2_tx.py --mode manchester. BIT_US must match its --bit-us (default 4000).
-
-  Frame: preamble 0xAA x6 | sync 0x2DD4 | length | payload | CRC-8
-  Manchester (IEEE 802.3): bit 1 = LOW then HIGH, bit 0 = HIGH then LOW.
+  Pair with gps_transmit_v2.py / ntx2_tx*.py --mode manchester.
+  BIT_US must match the transmitter's --bit-us (default 4000).
 */
 
 const byte RXD_PIN = 2;                 // INT0
@@ -79,16 +96,34 @@ void resetDecoder() {
 }
 
 void printFrame(bool ok) {
-  Serial.print(millis());
+  unsigned long nowMs = millis();
+  long rssiMv = analogRead(RSSI_PIN) * 5000L / 1023L;
+
+  // Human-readable line (for live viewing in the Serial Monitor)
+  Serial.print(nowMs);
   Serial.print(F(" ms  "));
   Serial.print(ok ? F("OK  ") : F("BAD CRC  "));
   Serial.print(F("RSSI="));
-  Serial.print(analogRead(RSSI_PIN) * 5000L / 1023L);
+  Serial.print(rssiMv);
   Serial.print(F(" mV  ok/bad="));
   Serial.print(framesOk);
   Serial.print('/');
   Serial.print(framesBad);
   Serial.print(F("  | "));
+  for (byte i = 0; i < payloadLen; i++) {
+    char c = payload[i];
+    Serial.print((c >= 32 && c < 127) ? c : '.');
+  }
+  Serial.println();
+
+  // Machine-parseable line for the companion PC script
+  Serial.print(F("LOG,"));
+  Serial.print(ok ? F("OK") : F("BAD"));
+  Serial.print(',');
+  Serial.print(nowMs);
+  Serial.print(',');
+  Serial.print(rssiMv);
+  Serial.print(',');
   for (byte i = 0; i < payloadLen; i++) {
     char c = payload[i];
     Serial.print((c >= 32 && c < 127) ? c : '.');
@@ -145,7 +180,6 @@ void handleEdge(unsigned long t, byte level) {
   unsigned long dt = t - lastEdgeUs;
   lastEdgeUs = t;
 
-  // Classify the gap since the previous edge: half a bit (short) or a full bit (long)
   byte cls = 0;                                   // 0 = invalid
   if (dt >= BIT_US / 4 && dt < BIT_US * 3 / 4) cls = 1;          // short
   else if (dt >= BIT_US * 3 / 4 && dt < BIT_US * 3 / 2) cls = 2; // long
@@ -153,7 +187,6 @@ void handleEdge(unsigned long t, byte level) {
   if (cls == 0) { resetDecoder(); return; }
 
   if (!locked) {
-    // The preamble is alternating bits: every edge is a mid-bit edge, every gap is long
     if (cls == 2) {
       if (++longCount >= 6) {
         locked = true;
@@ -169,16 +202,16 @@ void handleEdge(unsigned long t, byte level) {
 
   if (atMid) {
     if (cls == 1) {
-      atMid = false;              // boundary edge: no bit here
+      atMid = false;
     } else {
-      onBit(level);               // another mid-bit edge
+      onBit(level);
     }
   } else {
     if (cls == 1) {
-      atMid = true;               // boundary -> mid-bit edge
+      atMid = true;
       onBit(level);
     } else {
-      resetDecoder();             // impossible sequence: lost timing
+      resetDecoder();
     }
   }
 }
@@ -186,7 +219,7 @@ void handleEdge(unsigned long t, byte level) {
 void setup() {
   pinMode(RXD_PIN, INPUT);
   Serial.begin(115200);
-  Serial.println(F("NRX2 MANCHESTER RECEIVER"));
+  Serial.println(F("NRX2 MANCHESTER RECEIVER (with LOG, output)"));
   attachInterrupt(digitalPinToInterrupt(RXD_PIN), onEdge, CHANGE);
 }
 
@@ -202,12 +235,11 @@ void loop() {
     handleEdge(t, level);
   }
 
-  if (overflowCount != lastOverflow) {         // noise storm: start over
+  if (overflowCount != lastOverflow) {
     lastOverflow = overflowCount;
     resetDecoder();
   }
 
-  // Lost the signal mid-frame: give up after 4 bit-times of silence
   if ((locked || longCount > 0) && (micros() - lastEdgeUs > BIT_US * 4)) {
     resetDecoder();
   }

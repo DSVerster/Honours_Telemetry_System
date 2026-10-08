@@ -1,0 +1,31 @@
+# Python dependencies for Honours_Telemetry_System
+#
+# Install with:
+#     python3 -m pip install -r requirements.txt
+#
+# On Raspberry Pi OS (Bookworm or newer) pip refuses to install into the
+# system Python, so use a virtual environment that can still see the apt
+# package python3-gps (see the "Installation" section of README.md):
+#     python3 -m venv --system-site-packages .venv
+#     source .venv/bin/activate
+#     python3 -m pip install -r requirements.txt
+#
+# NOT listed here (cannot be installed correctly with pip):
+#     gps  ->  the gpsd Python client. Install the apt package instead:
+#              sudo apt install gpsd gpsd-clients python3-gps
+#     The "gps" package on PyPI is a different, unrelated project.
+#
+# analysis.py and verify.py use only the Python standard library
+# (plus the apt-provided "gps" module for verify.py).
+
+# Ground station PC: reads the Arduino's USB serial output
+# (programs/ground/receiver_logger/gps_receive_logger.py)
+pyserial>=3.5
+
+# Payload Raspberry Pi: drives the NTX2 transmitter on GPIO17
+# (programs/payload/*/gps_transmit.py)
+# The environment marker means this is skipped on a Windows/macOS/x86 ground
+# PC, where RPi.GPIO cannot be installed, and installed on a Raspberry Pi.
+# If the build fails, run:  sudo apt install python3-dev
+# (or use the apt package instead:  sudo apt install python3-rpi.gpio)
+RPi.GPIO>=0.7.1; platform_machine == "armv6l" or platform_machine == "armv7l" or platform_machine == "aarch64"

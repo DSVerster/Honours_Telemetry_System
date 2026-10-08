@@ -1,0 +1,75 @@
+# ============================================================
+# LOGS AND GENERATED DATA - NEVER COMMIT THESE
+# ============================================================
+# Everything the programs write at runtime is excluded. There are
+# deliberately NO "!" exceptions in this section, so nothing below
+# can be re-included by accident.
+
+# Any "logs" directory, anywhere in the repository. This covers:
+#   programs/payload/air/logs/            (gps_execute.py CSVs, gps_transmit.log)
+#   programs/payload/stationary/logs/     (gps_execute.py CSVs, gps_transmit.log)
+#   programs/payload/gps_test/logs/
+#   programs/ground/receiver_logger/logs/ (gps_received.csv)
+logs/
+log/
+
+# Any CSV (GPS session logs, received-telemetry logs, exports)
+*.csv
+*.csv.*
+
+# Any log file, including rotated ones (gps_transmit.log, gps_transmit.log.1, ...)
+*.log
+*.log.*
+
+# Latest GPS position written by gps_execute.py (and its atomic-write temp file)
+latest_gps.json
+latest_gps.json.*
+*.json.tmp
+
+# Report written by analysis.py (contains summarised GPS log data)
+log_analysis.txt
+
+# ============================================================
+# Python
+# ============================================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+ENV/
+.pytest_cache/
+*.egg-info/
+
+# ============================================================
+# Arduino build output
+# ============================================================
+*.hex
+*.elf
+*.bin
+
+# ============================================================
+# IDE / editor files
+# ============================================================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ============================================================
+# Temporary / generated files
+# ============================================================
+*.tmp
+*.temp
+*.bak
+
+# ============================================================
+# OS-generated files
+# ============================================================
+.DS_Store
+Thumbs.db
+desktop.ini
