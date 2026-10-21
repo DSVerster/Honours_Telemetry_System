@@ -1,0 +1,38 @@
+# Slide 1:
+
+Good day. I am Denzel Verster, and my project is a communication and tracking system for a stratospheric balloon. My supervisor is Professor Gunther Drevin.
+
+
+# Slide 2:
+
+Research balloons flying at twenty to thirty kilometres need telemetry to be followed, and a way to find the payload after landing. But power, weight and bandwidth are limited, and cellular networks serve people on the ground. My question was: how can a reliable, power-efficient communication and tracking system be built for a stratospheric balloon? My plan was GPS positioning, a long-range UHF link and a matching ground station.
+
+
+# Slide 3:
+
+I used design science research within the pragmatic paradigm, because the outcome is a working artefact. It was built in three cycles: GPS, transmitter and ground station. Performance was measured quantitatively, first on the ground and then on a balloon flight. Ethical considerations were information leakage, spectrum rules and flight safety.
+
+
+# Slide 4:
+
+Four concepts matter. Telemetry is collecting and sending data from a remote platform. UHF around 433 megahertz gives long range at low power, but low data rates. GPS gives position from satellite timing. Redundancy, such as sending data more than once, reduces the chance of losing contact.
+
+
+# Slide 5:
+
+The airborne unit has a GPS module feeding a Raspberry Pi Zero, which sends position through a Radiometrix NTX2 transmitter on 434.65 megahertz, powered by a power bank. Every minute it sends a short packet of about thirty-three bytes: a counter, latitude, longitude, altitude and time. The NTX2 has no error checking, so I designed my own frame, with synchronisation, length, a CRC and Manchester coding, and send six copies of every frame. On the ground, an NRX2 receiver feeds an Arduino Uno, which decodes and checks each frame, and a computer logs it.
+
+
+# Slide 6:
+
+These are excerpts from the flight logs. On the left, the Raspberry Pi logs each packet as it is sent, and every packet goes out as six copies. On the right, the ground station logs the same packets after decoding, with the signal strength and how many of the six copies arrived. Packet 47 arrived with only two copies, and was still decoded. This confirmed that the link worked from end to end.
+
+
+# Slide 7:
+
+On the ground, stationary GPS readings varied by 5.6 metres on average, and by up to 51 metres. In link tests at up to 20 metres, every reading arrived, along with 98.8 percent of individual copies. In the balloon flight on 9 October, the system tracked the balloon up to 5.4 kilometres altitude and 7.2 kilometres distance. All 18 airborne packets arrived, even though only 85 percent of copies did, so the repeated copies worked. After about 17.5 minutes the power bank stopped supplying power, and telemetry ended.
+
+
+# Slide 8:
+
+The prototype shows that position data can be acquired, transmitted and logged reliably when each reading is repeated, up to 5.4 kilometres. The research question is therefore answered in part. Not yet demonstrated are operation at stratospheric altitude, power consumption, and recovery using this system, since the payload was found with an independent GPS tracker. The next step is a repeat flight with a bench-tested power supply, measured current draw and a backup tracker. Thank you.

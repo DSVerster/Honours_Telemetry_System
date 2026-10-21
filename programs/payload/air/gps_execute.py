@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
-import gps
-import csv
-import json
-import os
-import time
+import gps, csv, json, os, time
 from datetime import datetime, timezone
 
 # Only latitude and longitude are required for a valid GPS position
