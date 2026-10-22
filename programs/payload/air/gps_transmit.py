@@ -1,13 +1,5 @@
 #!/usr/bin/env python3
-"""
-NTX2 GPS beacon transmitter (Raspberry Pi, RPi.GPIO, GPIO17).
-
-Same as your gps_transmit.py (with the transmission_counter group-id
-field you added), plus file logging: every line this script would have
-printed to the console (what it transmitted, or a warning/error) is
-also written to logs/gps_transmit.log in the current directory. It does
-NOT log raw GPS JSON reads in between transmissions - only transmit
-events and problems, exactly as you asked.
+""" NTX2 GPS beacon transmitter (Raspberry Pi, RPi.GPIO, GPIO17).
 
 Expected JSON shape (extra fields are ignored):
     {
@@ -34,8 +26,7 @@ Usage:
     python3 gps_transmit_v2.py --json-path /home/strato/latest_gps.json
     python3 gps_transmit_v2.py --interval 120 --repeats 6
 
-Run with sudo for GPIO access / better timing.
-"""
+Run with sudo for GPIO access / better timing. """
 
 import argparse, gc, json, logging, os, time
 from datetime import datetime, timezone

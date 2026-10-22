@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-"""
-Flight-test analysis for the stratospheric balloon communication and
+""" Flight-test analysis for the stratospheric balloon communication and
 tracking artefact.
 
 Inputs (all from the 2026-10-09 flight):
@@ -15,8 +14,7 @@ Outputs (written to OUT_DIR):
 
 Usage:
   python3 flight_analysis.py
-  python3 flight_analysis.py --gs-lat -26.9029 --gs-lon 27.1806 --gs-alt 1447
-"""
+  python3 flight_analysis.py --gs-lat -26.9029 --gs-lon 27.1806 --gs-alt 1447 """
 import argparse, re
 from datetime import timedelta
 from pathlib import Path

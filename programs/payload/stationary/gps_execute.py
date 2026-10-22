@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
-import gps
-import csv
-import json
-import os
-import time
+import gps, csv, json, os, time
 from datetime import datetime, timezone
 
 # Only latitude and longitude are required for a valid GPS position
@@ -143,9 +139,7 @@ def main():
         }
 
         # ALWAYS update the latest GPS information.
-        # This means geofencing/transmission can access
-        # the newest valid position independently of
-        # the 5-second research logging interval.
+        # This means geofencing/transmission can access the newest valid position independently of the 5-second research logging interval.
         update_latest_gps(latest_valid_fix)
 
         current_time = time.monotonic()

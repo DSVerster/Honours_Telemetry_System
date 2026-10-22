@@ -1,12 +1,5 @@
 /*
   NRX2 Manchester receiver (Arduino Uno) - with machine-parseable logging
-
-  Same decoder as rx_manchester.ino. The only addition: every completed
-  frame (good or bad CRC) also prints a single-line, comma-separated
-  "LOG," record meant for a PC-side script to parse automatically:
-
-      LOG,<OK|BAD>,<millis>,<RSSI_mV>,<payload text>
-
   The payload text itself is whatever ASCII was sent - for the GPS
   beacon that's "<group_id>,<lat>,<lon>,<alt>,<hhmmss>", so a LOG line
   looks like:
@@ -18,7 +11,7 @@
   comma is the raw payload text (which may itself contain commas).
 
   The original human-readable line is kept too, for anyone watching the
-  Serial Monitor live.
+  Serial Monitor live. That is if someone is actually even reading this.
 
   Wiring (NRX2 powered from the Uno's 5V):
     NRX2 pin 7  RXD   -> D2   (direct, no resistor)

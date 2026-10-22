@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-"""
-GPS receive logger (PC/laptop side, connected to the Arduino over USB serial).
+""" GPS receive logger (PC/laptop side, connected to the Arduino over USB serial).
 
 Reads the Arduino's serial output, looks for lines of the form:
 
@@ -22,15 +21,12 @@ Usage:
 
 Find your port:
     Linux/Mac: ls /dev/tty.*  or  ls /dev/ttyACM* /dev/ttyUSB*
-    Windows:   Device Manager -> Ports (COM & LPT)
-"""
+    Windows:   Device Manager -> Ports (COM & LPT) """
 
 import argparse, csv, os, time, serial
 from datetime import datetime, timezone
 
-FINALIZE_SECONDS = 10.0   # how long to wait after the last copy before
-                          # treating a transmission group as "done" and
-                          # writing its final row with the copy count
+FINALIZE_SECONDS = 10.0   # how long to wait after the last copy before treating a transmission group as "done" and writing its final row with the copy count
 
 def parse_log_line(line):
     # Parse a 'LOG,...' line. Returns (status, millis, rssi_mv, payload_text) or None if the line isn't a valid LOG line.

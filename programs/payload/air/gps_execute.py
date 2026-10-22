@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 # Only latitude and longitude are required for a valid GPS position
 REQUIRED_FIELDS = ["lat", "lon"]
 MIN_MODE = 3  # 2 = 2D fix, 3 = 3D fix
-LOG_INTERVAL = 30  # seconds
+LOG_INTERVAL = 5  # seconds
 
 # Directory containing this Python script
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -139,9 +139,7 @@ def main():
         }
 
         # ALWAYS update the latest GPS information.
-        # This means geofencing/transmission can access
-        # the newest valid position independently of
-        # the 5-second research logging interval.
+        # This means geofencing/transmission can access the newest valid position independently of the 5-second research logging interval.
         update_latest_gps(latest_valid_fix)
 
         current_time = time.monotonic()
